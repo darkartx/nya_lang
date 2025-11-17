@@ -1,2 +1,2 @@
-# nyaesc_lang
-Not Yet Another Ecma Script Clone Programming Langugage
+# nya_lang
+Not Yet Another ... Programming Langugage
