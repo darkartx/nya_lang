@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "nyaesc_lang"
+name = "nya_lang"
 version = "0.1.0"
