@@ -1,22 +1,22 @@
 use std::{error, fmt};
 
-use crate::token::{Pos};
+use crate::span::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ErrorKind {
     UnexpectedEof(UnexpectedEofError),
     UnexpectedChar(UnexpectedCharError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Error {
     pub kind: ErrorKind,
-    pub position: Pos,
+    pub span: Span,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Lexer error at {}:{}: ", self.position.line, self.position.column)
+        write!(f, "Lexer error at {}:{}: ", self.span.position.line, self.span.position.column)
             .and_then(|_| {
                 match &self.kind {
                     ErrorKind::UnexpectedEof(err) => write!(f, "{err}"),
@@ -36,15 +36,15 @@ impl error::Error for Error {
 }
 
 impl Error {
-    pub(super) fn new(kind: ErrorKind, position: Pos) -> Self {
+    pub(super) fn new(kind: ErrorKind, span: Span) -> Self {
         Self {
             kind,
-            position
+            span
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnexpectedCharError(pub char);
 
 impl fmt::Display for UnexpectedCharError {
@@ -55,7 +55,7 @@ impl fmt::Display for UnexpectedCharError {
 
 impl error::Error for UnexpectedCharError {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnexpectedEofError;
 
 impl error::Error for UnexpectedEofError {}

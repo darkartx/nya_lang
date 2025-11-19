@@ -1,6 +1,9 @@
-use std::str;
+use std::{str, mem};
 
-use crate::token::*;
+use crate::{
+    token::*,
+    span::*,
+};
 
 use super::error::*;
 
@@ -9,6 +12,7 @@ pub struct Tokens<'a> {
     input: str::Chars<'a>,
     index: usize,
     lexeme: String,
+    current_char: Option<char>,
     next_char: Option<char>,
     line: usize,
     column: usize,
@@ -19,13 +23,15 @@ impl<'a> Tokens<'a> {
     pub(super) fn new(input: &'a String) -> Self {
         let mut input = input.chars();
         let index = 0;
-        let lexeme = Default::default();
+        let lexeme: String = Default::default();
+        let current_char = input.next();
         let next_char = input.next();
         
         Self {
             input,
             index,
             lexeme,
+            current_char,
             next_char,
             line: 1,
             column: 1,
@@ -48,26 +54,21 @@ impl Tokens<'_> {
         Pos::new(self.index, self.line, self.column)
     }
 
-    // fn token_position(&self) -> Position {
-    //     self.token_position
-    // } 
-
-    fn make_token(&mut self, token_type: TokenType) -> Token {
-        let lexeme = self.lexeme.clone();
-        self.lexeme = Default::default();
-        Token::new_with_span(token_type, lexeme, Span::new(self.token_position, self.index - self.token_position.index))
+    fn token_span(&self) -> Span {
+        Span::new(self.token_position, self.index - self.token_position.index)
     }
 
-    // fn make_token_current_position(&self, token_type: TokenType, lexeme: String, literal_value: LiteralValue) -> Token {
-    //     Token::new_with_position(token_type, lexeme, literal_value, self.current_position())
-    // }
+    fn make_token(&mut self, token_type: TokenType) -> Token {
+        let lexeme = mem::take(&mut self.lexeme);
+        Token::new_with_span(token_type, lexeme, self.token_span())
+    }
 
     fn make_error(&self, error_kind: ErrorKind) -> Error {
-        Error::new(error_kind, self.token_position)
+        Error::new(error_kind, self.token_span())
     }
 
     fn advance(&mut self) {
-        match self.next_char {
+        match self.current_char {
             Some(ch) if is_new_line_char(ch) => {
                 self.line += 1;
                 self.column = 1;
@@ -79,18 +80,19 @@ impl Tokens<'_> {
         }
 
         self.index += 1;
-        self.lexeme.push(self.next_char.unwrap());
+        self.lexeme.push(self.current_char.unwrap());
+        self.current_char = self.next_char;
         self.next_char = self.input.next();
     }
 
     fn read_keyword_or_identifier(&mut self) -> Result<Token, Error> {
-        match self.next_char {
+        match self.current_char {
             Some(ch) if is_idetifier_start_char(ch) => self.advance(),
             _ => { return self.read_number() },
         }
 
         loop {
-            match self.next_char {
+            match self.current_char {
                 Some(ch) if is_idetifier_char(ch) => self.advance(),
                 _ => break,
             }
@@ -108,26 +110,89 @@ impl Tokens<'_> {
     }
 
     fn read_number(&mut self) -> Result<Token, Error> {
-        match self.next_char {
+        match self.current_char {
             Some('0') => {
                 self.advance();
-                match self.next_char {
-                    _ => self.read_decimal_number()
+                match self.current_char {
+                    Some('x') => {
+                        self.advance();
+                        self.read_hexdecimal_number()
+                    }
+                    Some('b') => {
+                        self.advance();
+                        self.read_bindecimal_number()
+                    }
+                    Some('o') => {
+                        self.advance();
+                        self.read_octdecimal_number()
+                    }
+                    _ => self.read_decimal_float_number(),
                 }
             },
             Some(ch) if is_number_start_char(ch) => {
                 self.advance();
-                self.read_decimal_number()
+                self.read_decimal_float_number()
             },
             _ => self.read_string(),
         }
     }
 
+    fn read_decimal_float_number(&mut self) -> Result<Token, Error> {
+        loop {
+            match self.current_char {
+                Some(ch) if is_number_char(ch) => self.advance(),
+                Some('.') => {
+                    match self.next_char {
+                        Some(ch) if is_idetifier_start_char(ch) => break,
+                        Some('.') => break,
+                        _ => return self.read_float_number(),
+                    }
+                }
+                Some('e' | 'E') => return self.read_float_number(),
+                _ => break,
+            }
+        }
+
+        self.read_decimal_number()
+    }
+
     fn read_decimal_number(&mut self) -> Result<Token, Error> {
         loop {
-            match self.next_char {
+            match self.current_char {
                 Some(ch) if is_number_char(ch) => self.advance(),
-                Some('.' | 'e') => return self.read_float_number(),
+                _ => break,
+            }
+        }
+
+        Ok(self.make_token(TokenType::IntNumber))
+    }
+
+    fn read_hexdecimal_number(&mut self) -> Result<Token, Error> {
+        loop {
+            match self.current_char {
+                Some(ch) if is_hexdecimal_char(ch) => self.advance(),
+                _ => break,
+            }
+        }
+
+        Ok(self.make_token(TokenType::IntNumber))
+    }
+
+    fn read_octdecimal_number(&mut self) -> Result<Token, Error> {
+        loop {
+            match self.current_char {
+                Some(ch) if is_octdecimal_char(ch) => self.advance(),
+                _ => break,
+            }
+        }
+
+        Ok(self.make_token(TokenType::IntNumber))
+    }
+
+    fn read_bindecimal_number(&mut self) -> Result<Token, Error> {
+        loop {
+            match self.current_char {
+                Some(ch) if is_bindecimal_char(ch) => self.advance(),
                 _ => break,
             }
         }
@@ -137,7 +202,7 @@ impl Tokens<'_> {
 
     fn read_float_number(&mut self) -> Result<Token, Error> {
         loop {
-            match self.next_char {
+            match self.current_char {
                 Some(ch) if is_number_char(ch) => self.advance(),
                 Some('.') => {
                     self.advance();
@@ -148,10 +213,16 @@ impl Tokens<'_> {
         }
 
         loop {
-            match self.next_char {
+            match self.current_char {
                 Some(ch) if is_number_char(ch) => self.advance(),
-                Some('e') => {
+                Some('e' | 'E') => {
                     self.advance();
+
+                    match self.current_char {
+                        Some('+' | '-') => self.advance(),
+                        _ => {}
+                    }
+
                     break;
                 }
                 _ => break,
@@ -159,7 +230,7 @@ impl Tokens<'_> {
         }
 
         loop {
-            match self.next_char {
+            match self.current_char {
                 Some(ch) if is_number_char(ch) => self.advance(),
                 _ => break,
             }
@@ -169,13 +240,13 @@ impl Tokens<'_> {
     }
 
     fn read_string(&mut self) -> Result<Token, Error> {
-        match self.next_char {
+        match self.current_char {
             Some('"') => self.advance(),
-            _ => return self.read_operator(),
+            _ => return self.read_sign(),
         }
 
         loop {
-            match self.next_char {
+            match self.current_char {
                 Some('\\') => {
                     self.advance();
                     self.advance();
@@ -192,9 +263,21 @@ impl Tokens<'_> {
         Ok(self.make_token(TokenType::String))
     }
 
-    fn read_operator(&mut self) -> Result<Token, Error> {
-        if self.lexeme.len() == 0 {
-            self.advance();
+    fn read_sign(&mut self) -> Result<Token, Error> {
+        match self.current_char {
+            Some('.') => {
+                self.advance();
+                if let Some('.') = self.current_char {
+                    self.advance()
+                }
+            }
+            Some(ch) if is_sign_char(ch) => self.advance(),
+            Some(ch) => {
+                return Err(self.make_error(ErrorKind::UnexpectedChar(
+                    UnexpectedCharError(ch)
+                )))
+            }
+            None => {}
         }
 
         let token_type = match self.lexeme.as_str() {
@@ -205,12 +288,12 @@ impl Tokens<'_> {
             "(" => TokenType::Lparen,
             ")" => TokenType::Rparen,
             "," => TokenType::Comma,
+            "-" => TokenType::Minus,
+            "." => TokenType::Dot,
+            ".." => TokenType::Range,
+            "\n" => TokenType::NewLine,
             "" => TokenType::Eof,
-            _ => {
-                return Err(self.make_error(ErrorKind::UnexpectedChar(
-                    UnexpectedCharError(self.lexeme.chars().next().unwrap())
-                )))
-            }
+            _ => unreachable!()
         };
 
         Ok(self.make_token(token_type))
@@ -218,7 +301,7 @@ impl Tokens<'_> {
 
     fn skip_whitespaces(&mut self) {
         loop {
-            match self.next_char {
+            match self.current_char {
                 Some(ch) if is_whitespace_char(ch) => {},
                 _ => break
             }
@@ -250,10 +333,30 @@ fn is_number_char(ch: char) -> bool {
 
 #[inline]
 fn is_whitespace_char(ch: char) -> bool {
-    ch.is_whitespace()
+    ch.is_whitespace() && ch != '\n'
 }
 
 #[inline]
 fn is_new_line_char(ch: char) -> bool {
     ch == '\n'
+}
+
+#[inline]
+fn is_sign_char(ch: char) -> bool {
+    matches!(ch, '=' | '+' | ';' | '*' | '(' | ')' | ',' | '-' | '\n')
+}
+
+#[inline]
+fn is_hexdecimal_char(ch: char) -> bool {
+    ch.is_ascii_digit() || matches!(ch, 'a'..='f' | 'A'..='F' | '_')
+}
+
+#[inline]
+fn is_bindecimal_char(ch: char) -> bool {
+    matches!(ch, '0' | '1' | '_')
+}
+
+#[inline]
+fn is_octdecimal_char(ch: char) -> bool {
+    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '_')
 }

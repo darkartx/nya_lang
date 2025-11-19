@@ -5,6 +5,7 @@ pub mod error;
 mod tests;
 
 pub use tokens::Tokens;
+pub use error::Error;
 
 #[derive(Debug)]
 pub struct Lexer {
