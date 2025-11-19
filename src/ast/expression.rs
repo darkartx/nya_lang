@@ -20,13 +20,16 @@ impl Identifier {
 }
 
 #[derive(Debug)]
-pub enum Value {
+pub enum Literal {
     Int(i64),
+    Str(String),
+    Bool(bool),
+    Float(f64),
 }
 
-impl Expression for Value {
+impl Expression for Literal {
     fn accept(&self, visitor: &mut dyn ExpressionVisitor) {
-        visitor.visit_value(self);
+        visitor.visit_literal(self);
     }
 }
 

@@ -12,7 +12,7 @@ pub trait Expression: fmt::Debug {
 
 pub trait ExpressionVisitor {
     fn visit_identifier(&mut self, identifier: &Identifier);
-    fn visit_value(&mut self, value: &Value);
+    fn visit_literal(&mut self, value: &Literal);
 }
 
 pub trait Statement: fmt::Debug {
