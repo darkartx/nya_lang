@@ -11,7 +11,7 @@ struct TestPrinter {
 
 impl ast::ExpressionVisitor for TestPrinter {
     fn visit_identifier(&mut self, identifier: &ast::Identifier) {
-        write!(self.buffer, "{}", identifier.name()).unwrap();
+        write!(self.buffer, "{}", identifier.to_string()).unwrap();
     }
     
     fn visit_literal(&mut self, literal: &ast::Literal) {
@@ -21,6 +21,44 @@ impl ast::ExpressionVisitor for TestPrinter {
             ast::Literal::Bool(value) => write!(self.buffer, "({})", value).unwrap(),
             ast::Literal::Float(value) => write!(self.buffer, "(float {})", value).unwrap(),
         }
+    }
+
+    fn visit_binary(&mut self, binary: &Binary) {
+        write!(self.buffer, "(").unwrap();
+
+        match binary.op {
+            ast::BinaryOp::And => write!(self.buffer, "&& ").unwrap(),
+            ast::BinaryOp::Div => write!(self.buffer, "/ ").unwrap(),
+            ast::BinaryOp::Eq => write!(self.buffer, "== ").unwrap(),
+            ast::BinaryOp::Gt => write!(self.buffer, "> ").unwrap(),
+            ast::BinaryOp::Gte => write!(self.buffer, ">= ").unwrap(),
+            ast::BinaryOp::Lt => write!(self.buffer, "< ").unwrap(),
+            ast::BinaryOp::Lte => write!(self.buffer, "<= ").unwrap(),
+            ast::BinaryOp::Minus => write!(self.buffer, "- ").unwrap(),
+            ast::BinaryOp::Mod => write!(self.buffer, "% ").unwrap(),
+            ast::BinaryOp::Mult => write!(self.buffer, "* ").unwrap(),
+            ast::BinaryOp::Neq => write!(self.buffer, "!= ").unwrap(),
+            ast::BinaryOp::Or => write!(self.buffer, "|| ").unwrap(),
+            ast::BinaryOp::Plus => write!(self.buffer, "+ ").unwrap(),
+        }
+
+        binary.left.accept(self);
+        write!(self.buffer, " ").unwrap();
+
+        binary.right.accept(self);
+        write!(self.buffer, ")").unwrap();
+    }
+
+    fn visit_unary(&mut self, unary: &Unary) {
+        write!(self.buffer, "(").unwrap();
+
+        match unary.op {
+            ast::UnaryOp::Minus => write!(self.buffer, "- ").unwrap(),
+            ast::UnaryOp::Not => write!(self.buffer, "! ").unwrap(),
+        }
+
+        unary.right.accept(self);
+        write!(self.buffer, ")").unwrap();
     }
 }
 
@@ -49,8 +87,9 @@ fn test_parse_let_statement() {
         ("let a = 5;", "(let a = (int 5))\n"),
         ("let name = \"orc\\u{2764}\";", "(let name = (str \"orc❤\"))\n"),
         ("let alive = true;", "(let alive = (true))\n"),
-//         ("let z = x + y;", "(let z = (x + y))\n"),
-//         ("let dmg = (a + b * c) / 2 - crit;", "(let dmg = (((a + (b * c)) / 2) - crit)\n"),
+        ("let z = x + y;", "(let z = (+ x y))\n"),
+        ("let dmg = (a + b * c) / 2 - crit;", "(let dmg = (- (/ (+ a (* b c)) (int 2)) crit))\n"),
+        ("let neg = -100.5", "(let neg = (- (float 100.5)))\n"),
 //         ("let msg = f\"HP: {hp}\";", "(let msg = (fstr \"HP: {hp}\"))\n"),
 //         ("let arr = [1, 2, 3, 4];", "(let arr = ([1, 2, 3, 4]))\n"),
 //         ("let obj = { x: 1, y: 2 };", "(let obj = (obj {x: (1), y: (2)}))\n"),

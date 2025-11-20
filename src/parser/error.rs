@@ -3,13 +3,13 @@ use std::{fmt, error, num};
 use crate::{
     lexer::Error as LexerError,
     span::*,
-    token::Token,
+    token::*,
 };
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
     Lexer(LexerError),
-    UnexpectedToken(Token),
+    UnexpectedToken(UnexpectedTokenError),
     ParseInt(num::ParseIntError),
     ParseString(ParseStringError),
     ParseFloat(num::ParseFloatError),
@@ -23,17 +23,17 @@ pub struct Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Parse error ")?;
+        write!(f, "Parse error")?;
 
         if let Some(span) = self.span {
-            write!(f, "at {}:{}", span.position.line, span.position.column)?;
+            write!(f, " at {}:{}", span.position.line, span.position.column)?;
         }
 
-        write!(f, ":")?;
+        write!(f, ": ")?;
 
         match &self.kind {
             ErrorKind::Lexer(err) => write!(f, "{err}"),
-            ErrorKind::UnexpectedToken(token) => write!(f, "unexpected token {}", token),
+            ErrorKind::UnexpectedToken(err) => write!(f, "{err}"),
             ErrorKind::ParseInt(err) => write!(f, "{err}"),
             ErrorKind::ParseString(err) => write!(f, "{err}"),
             ErrorKind::ParseFloat(err) => write!(f, "{err}"),
@@ -72,6 +72,12 @@ impl From<ParseStringError> for Error {
 impl From<num::ParseFloatError> for Error {
     fn from(value: num::ParseFloatError) -> Self {
         Self::new(ErrorKind::ParseFloat(value), None)
+    }
+}
+
+impl From<UnexpectedTokenError> for Error {
+    fn from(value: UnexpectedTokenError) -> Self {
+        Self::new(ErrorKind::UnexpectedToken(value), None)
     }
 }
 
@@ -121,3 +127,29 @@ impl error::Error for ParseStringError {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct UnexpectedTokenError {
+    pub current: Token,
+    pub expected: Vec<TokenType>,
+}
+
+impl fmt::Display for UnexpectedTokenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unexpected token {}", self.current)?;
+
+        if self.expected.len() > 0 {
+            let token_types_string = self.expected
+                .iter()
+                .map(|tt| tt.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+
+            write!(f, ", expected one of {}", token_types_string)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl error::Error for UnexpectedTokenError {}

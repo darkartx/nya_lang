@@ -1,0 +1,182 @@
+Program        ::= { Statement }
+
+//
+// === STATEMENTS ===
+//
+
+Statement      ::= LetStmt
+                 | ExprStmt
+                 | BlockStmt
+                 | IfStmt
+                 | WhileStmt
+                 | ForStmt
+                 | ReturnStmt
+                 | ClassStmt
+                 | FunctionDecl
+
+Semicolon      ::= ";"
+
+LetStmt        ::= "let" Identifier "=" Expression Semicolon
+
+ExprStmt       ::= Expression Semicolon
+
+BlockStmt      ::= "{" { Statement } "}"
+
+IfStmt         ::= "if" "(" Expression ")" Statement
+                   [ "else" Statement ]
+
+WhileStmt      ::= "while" "(" Expression ")" Statement
+
+ForStmt        ::= "for" "("
+                       [ ForInit ] ";" 
+                       [ Expression ] ";" 
+                       [ Expression ]
+                   ")" Statement
+
+ForInit        ::= LetStmt | Expression
+
+ReturnStmt     ::= "return" [ Expression ] Semicolon
+
+//
+// === DECLARATIONS ===
+//
+
+FunctionDecl   ::= "function" [ "async" ] Identifier "(" ParamList ")" BlockStmt
+
+ParamList      ::= [ Identifier { "," Identifier } ]
+
+ClassStmt      ::= "class" Identifier "{" { ClassMember } "}"
+
+ClassMember    ::= FunctionDecl
+                 | FieldDecl
+
+FieldDecl      ::= Identifier Semicolon
+
+//
+// === EXPRESSIONS ===
+//
+
+// Pratt-parser friendly precedence
+Expression     ::= Assignment
+
+Assignment     ::= LogicOr
+                 | MemberExpr "=" Assignment
+                 | Identifier "=" Assignment
+
+LogicOr        ::= LogicAnd { "||" LogicAnd }
+LogicAnd       ::= Equality { "&&" Equality }
+Equality       ::= Comparison { ( "==" | "!=" ) Comparison }
+Comparison     ::= Term { ( "<" | "<=" | ">" | ">=" ) Term }
+Term           ::= Factor { ( "+" | "-" ) Factor }
+Factor         ::= Unary { ( "*" | "/" | "%" ) Unary }
+
+Unary          ::= ( "!" | "-" ) Unary
+                 | Primary
+
+Primary        ::= Literal
+                 | Identifier
+                 | "(" Expression ")"
+                 | FunctionExpr
+                 | AwaitExpr
+                 | ArrayLiteral
+                 | ObjectLiteral
+                 | FString
+
+//
+// === CALLS AND MEMBERS ===
+//
+
+Postfix        ::= Primary { PostfixOp }
+
+PostfixOp      ::= "(" ArgList ")"
+                 | "." Identifier
+
+ArgList        ::= [ Expression { "," Expression } ]
+
+//
+// === OBJECT LITERAL ===
+//
+
+ObjectLiteral  ::= "{" [ ObjectField { "," ObjectField } ] "}"
+
+ObjectField    ::= Identifier ":" Expression
+
+//
+// === ARRAY LITERAL ===
+//
+
+ArrayLiteral   ::= "[" [ Expression { "," Expression } ] "]"
+
+//
+// === FUNCTION EXPRESSION ===
+//
+
+FunctionExpr   ::= "function" [ "async" ] "(" ParamList ")" BlockStmt
+
+//
+// === AWAIT ===
+//
+
+AwaitExpr      ::= "await" Primary
+
+//
+// === LITERALS ===
+//
+
+Literal        ::= NumberLiteral
+                 | StringLiteral
+                 | "true"
+                 | "false"
+                 | "null"
+
+//
+// === IDENTIFIERS ===
+//
+
+Identifier     ::= IdentifierStart { IdentifierPart }
+
+IdentifierStart ::= Letter | "_"
+IdentifierPart  ::= Letter | Digit | "_"
+
+//
+// === NUMBER LITERALS ===
+//
+
+NumberLiteral  ::= IntLiteral
+                 | FloatLiteral
+
+IntLiteral     ::= Digit { Digit }
+
+FloatLiteral   ::= Digit { Digit } "." Digit { Digit }
+                 | Digit "." Digit
+
+//
+// === STRINGS ===
+//
+
+StringLiteral  ::= "\"" { StringChar } "\""
+StringChar     ::= ? any character except quote and backslash ?
+                 | "\\" Escaped
+
+Escaped        ::= "\"" | "n" | "t" | "\\" | "r"
+
+//
+// === F-STRINGS ===
+//
+
+FString        ::= "f\"" { FStringPart } "\""
+
+FStringPart    ::= FStringText
+                 | FStringInterp
+
+// Everything until '{' or end of string:
+FStringText    ::= { ? normal chars except { } ? }
+
+FStringInterp  ::= "{" Expression "}"
+
+//
+// === MISC ===
+//
+
+Digit          ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+Letter         ::= "a" | ... | "z" | "A" | ... | "Z"

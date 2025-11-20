@@ -227,6 +227,51 @@ fn test_numbers() {
     }
 }
 
+#[test]
+fn test_ops() {
+    let input = "+- == != &&|| > >= < <= */%";
+
+    let test_cases = vec![
+        // Plus
+        make_token(Plus, "+", Pos::new(0, 1, 1), 1),
+        // Minus
+        make_token(Minus, "-", Pos::new(1, 1, 2), 1),
+        // Eq
+        make_token(Eq, "==", Pos::new(3, 1, 4), 2),
+        // Neq
+        make_token(Neq, "!=", Pos::new(6, 1, 7), 2),
+        // And
+        make_token(And, "&&", Pos::new(9, 1, 10), 2),
+        // Or
+        make_token(Or, "||", Pos::new(11, 1, 12), 2),
+        // Gt
+        make_token(Gt, ">", Pos::new(14, 1, 15), 1),
+        // Gte
+        make_token(Gte, ">=", Pos::new(16, 1, 17), 2),
+        // Lt
+        make_token(Lt, "<", Pos::new(19, 1, 20), 1),
+        // Lte
+        make_token(Lte, "<=", Pos::new(21, 1, 22), 2),
+        // Mult
+        make_token(Mult, "*", Pos::new(24, 1, 25), 1),
+        // Div
+        make_token(Div, "/", Pos::new(25, 1, 26), 1),
+        // Mod
+        make_token(Mod, "%", Pos::new(26, 1, 27), 1),
+        // EOF
+        make_token(Eof, "", Pos::new(27, 1, 28), 0),
+    ];
+
+    let lexer = Lexer::new(input.to_string());
+    let mut tokens = lexer.tokens();
+
+    for tc in test_cases {
+        let token = tokens.next_token().unwrap();
+
+        assert_eq!(tc, token);
+    }
+}
+
 fn make_token(token_type: TokenType, lexeme: &str, start_pos: Pos, length: usize) -> Token {
     Token::new_with_span(token_type, lexeme.into(), Span::new(start_pos, length))
 }

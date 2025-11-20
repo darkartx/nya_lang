@@ -1,11 +1,12 @@
 use std::mem;
 
 use crate::{
-    ast, lexer::Tokens, token::*, span::*
+    ast, lexer::Tokens, span::*, token::*
 };
 
 use super::error::*;
 
+type TT = TokenType;
 type BoxStatement = Box<dyn ast::Statement>;
 type BoxExpression = Box<dyn ast::Expression>;
 
@@ -37,6 +38,8 @@ impl TokensParser<'_> {
         let mut statements = vec![];
 
         loop {
+            self.skip_newlines()?;
+
             if self.current_token_type() == TokenType::Eof {
                 break;
             }
@@ -53,8 +56,14 @@ impl TokensParser<'_> {
 
     fn parse_statement(&mut self) -> Result<BoxStatement, Error> {
         match self.current_token_type() {
-            TokenType::Let => self.parse_let_statement(),
-            _ => Err(self.make_error(ErrorKind::UnexpectedToken(self.current_token.clone())))
+            TT::Let => self.parse_let_statement(),
+            _ => Err(make_error(
+                UnexpectedTokenError {
+                    current: self.current_token.clone(),
+                    expected: vec![TT::Let]
+                },
+                self.current_token.span
+            )),
         }
     }
 
@@ -76,35 +85,130 @@ impl TokensParser<'_> {
     }
 
     fn parse_expression(&mut self) -> Result<BoxExpression, Error> {
+        self.parse_assigment()
+    }
+
+    fn parse_assigment(&mut self) -> Result<BoxExpression, Error> {
+        self.parse_logic_or()
+    }
+
+    fn parse_logic_or(&mut self) -> Result<BoxExpression, Error> {
+        self.parse_logic_and()
+    }
+
+    fn parse_logic_and(&mut self) -> Result<BoxExpression, Error> {
+        self.parse_equality()
+    }
+
+    fn parse_equality(&mut self) -> Result<BoxExpression, Error> {
+        self.parse_comparsion()
+    }
+
+    fn parse_comparsion(&mut self) -> Result<BoxExpression, Error> {
+        self.parse_term()
+    }
+
+    fn parse_term(&mut self) -> Result<BoxExpression, Error> {
+        let mut result = self.parse_factor()?;
+
+        self.skip_newlines()?;
+
+        if self.current_token_type_is(&[TT::Plus, TT::Minus]) {
+            let token = self.advance()?;
+            let right = self.parse_factor()?;
+            let op = match token.token_type {
+                TT::Plus => ast::BinaryOp::Plus,
+                TT::Minus => ast::BinaryOp::Minus,
+                _ => unreachable!(),
+            };
+
+            result = Box::new(ast::Binary{ left: result, op, right })
+        }
+
+        Ok(result)
+    }
+
+    fn parse_factor(&mut self) -> Result<BoxExpression, Error> {
+        let mut result = self.parse_unary()?;
+
+        self.skip_newlines()?;
+
+        if self.current_token_type_is(&[TT::Mult, TT::Div, TT::Mod]) {
+            let token = self.advance()?;
+            let right = self.parse_unary()?;
+            let op = match token.token_type {
+                TT::Mult => ast::BinaryOp::Mult,
+                TT::Div => ast::BinaryOp::Div,
+                TT::Mod => ast::BinaryOp::Mod,
+                _ => unreachable!(),
+            };
+
+            result = Box::new(ast::Binary{ left: result, op, right })
+        }
+
+        Ok(result)
+    }
+
+    fn parse_unary(&mut self) -> Result<BoxExpression, Error> {
+        let unary_token = if self.current_token_type_is(&[TT::Minus, TT::Not]) {
+            Some(self.advance()?)
+        } else {
+            None
+        };
+
+        let mut result = self.parse_primary()?;
+
+        if let Some(unary_token) = unary_token {
+            let op = match unary_token.token_type {
+                TT::Minus => ast::UnaryOp::Minus,
+                TT::Not => ast::UnaryOp::Not,
+                _ => unreachable!(),
+            };
+            result = Box::new(ast::Unary{op, right: result})
+        }
+
+        Ok(result)
+    }
+
+    fn parse_primary(&mut self) -> Result<BoxExpression, Error> {
         match self.current_token_type() {
-            TokenType::IntNumber => self.parse_int_literal(),
-            TokenType::String => self.parse_string_literal(),
-            TokenType::True | TokenType::False => self.parse_bool_literal(),
-            TokenType::FloatNumber => self.parse_float_literal(),
-            _ => Err(self.make_error(ErrorKind::UnexpectedToken(self.current_token.clone())))
+            TT::IntNumber => self.parse_int_literal(),
+            TT::String => self.parse_string_literal(),
+            TT::True | TT::False => self.parse_bool_literal(),
+            TT::FloatNumber => self.parse_float_literal(),
+            TT::Identifier => self.parse_idetifier()
+                .map(|i| Box::new(i) as Box<dyn ast::Expression>),
+            TT::Lparen => self.parse_group(),
+            _ => Err(make_error(
+                UnexpectedTokenError {
+                    current: self.current_token.clone(),
+                    expected: vec![TT::IntNumber, TT::String, TT::True, TT::False, TT::FloatNumber, TT::Identifier, TT::Lparen]
+                },
+                self.current_token.span
+            ))
         }
     }
 
     fn parse_int_literal(&mut self) -> Result<BoxExpression, Error> {
-        let token = self.advance()?;
-        let value: i64 = self.handle_result(token.lexeme.parse(), token.span)?;
+        let token = self.expect_advance(&[TT::IntNumber])?;
+        let value: i64 = handle_result(token.lexeme.parse(), token.span)?;
 
         Ok(Box::new(ast::Literal::Int(value)))
     }
 
     fn parse_string_literal(&mut self) -> Result<BoxExpression, Error> {
-        let token = self.advance()?;
+        let token = self.expect_advance(&[TT::String])?;
         let value = &token.lexeme[1..token.lexeme.len() - 1];
-        let value = self.handle_result(unescape_string(value), token.span)?;
+        let value = handle_result(unescape_string(value), token.span)?;
 
         Ok(Box::new(ast::Literal::Str(value)))
     }
 
     fn parse_bool_literal(&mut self) -> Result<BoxExpression, Error> {
-        let token = self.advance()?;
+        let token = self.expect_advance(&[TT::True, TT::False])?;
         let value = match token.token_type {
-            TokenType::True => true,
-            TokenType::False => false,
+            TT::True => true,
+            TT::False => false,
             _ => unreachable!()
         };
 
@@ -112,26 +216,55 @@ impl TokensParser<'_> {
     }
 
     fn parse_float_literal(&mut self) -> Result<BoxExpression, Error> {
-        let token = self.advance()?;
-        let value: f64 = self.handle_result(token.lexeme.parse(), token.span)?;
+        let token = self.expect_advance(&[TT::FloatNumber])?;
+        let value: f64 = handle_result(token.lexeme.parse(), token.span)?;
 
         Ok(Box::new(ast::Literal::Float(value)))
     }
 
-    fn handle_result<T, E: Into<Error>>(&self, result: Result<T, E>, span: Option<Span>) -> Result<T, Error> {
-        result.map_err(|err| err.into().with_span(span))
+    fn parse_idetifier(&mut self) -> Result<ast::Identifier, Error> {
+        let token = self.expect_advance(&[TT::Identifier])?;
+        Ok(ast::Identifier(token.lexeme))
+    }
+
+    fn parse_group(&mut self) -> Result<BoxExpression, Error> {
+        self.expect_advance(&[TT::Lparen])?;
+        self.skip_newlines()?;
+        let result = self.parse_expression()?;
+        self.expect_advance(&[TT::Rparen])?;
+
+        Ok(result)
+    }
+
+    fn expect_advance(&mut self, token_types: &[TokenType]) -> Result<Token, Error> {
+        if self.current_token_type_is(token_types) {
+            Ok(self.advance()?)
+        } else {
+            Err(make_error(
+                UnexpectedTokenError {
+                    current: self.current_token.clone(),
+                    expected: token_types.to_vec(),
+                },
+                self.current_token.span
+            ))
+        }
     }
 
     fn skip_terminal(&mut self) -> Result<(), Error> {
         self.skip_tokens(&[
             TokenType::Semicolon,
-            TokenType::Eof,
+            TokenType::NewLine,
+        ])
+    }
+
+    fn skip_newlines(&mut self) -> Result<(), Error> {
+        self.skip_tokens(&[
             TokenType::NewLine,
         ])
     }
 
     fn skip_tokens(&mut self, token_types: &[TokenType]) -> Result<(), Error> {
-        if self.current_token_type_is(token_types) {
+        while self.current_token_type_is(token_types) {
             self.advance()?;
         }
 
@@ -140,20 +273,6 @@ impl TokensParser<'_> {
 
     fn current_token_type_is(&self, token_types: &[TokenType]) -> bool {
         token_types.iter().any(|tt| *tt == self.current_token.token_type)
-    }
-
-    fn parse_idetifier(&mut self) -> Result<ast::Identifier, Error> {
-        match self.current_token_type() {
-            TokenType::Identifier => {
-                let token = self.advance()?;
-                Ok(ast::Identifier::new(token.lexeme))
-            },
-            _ => Err(self.make_error(ErrorKind::UnexpectedToken(self.current_token.clone())))
-        }
-    }
-
-    fn make_error(&self, kind: ErrorKind) -> Error {
-        Error::new(kind, self.current_token.span)
     }
 
     fn current_token_type(&self) -> TokenType {
@@ -221,4 +340,12 @@ fn unescape_string(value: &str) -> Result<String, ParseStringError> {
     }
 
     Ok(result)
+}
+
+fn make_error<E: Into<Error> + 'static>(error: E, span: Option<Span>) -> Error {
+    error.into().with_span(span)
+}
+
+fn handle_result<T, E: Into<Error> + 'static>(result: Result<T, E>, span: Option<Span>) -> Result<T, Error> {
+    result.map_err(|err| make_error(err, span))
 }

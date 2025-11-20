@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Debug)]
-pub struct Identifier(String);
+pub struct Identifier(pub String);
 
 impl Expression for Identifier {
     fn accept(&self, visitor: &mut dyn ExpressionVisitor) {
@@ -9,13 +9,9 @@ impl Expression for Identifier {
     }
 }
 
-impl Identifier {
-    pub fn new(name: String) -> Self {
-        Self(name)
-    }
-
-    pub fn name(&self) -> &String {
-        &self.0
+impl ToString for Identifier {
+    fn to_string(&self) -> String {
+        self.0.clone()
     }
 }
 
@@ -33,3 +29,50 @@ impl Expression for Literal {
     }
 }
 
+#[derive(Debug)]
+pub struct Binary {
+    pub left: Box<dyn Expression>,
+    pub op: BinaryOp,
+    pub right: Box<dyn Expression>,
+}
+
+impl Expression for Binary {
+    fn accept(&self, visitor: &mut dyn ExpressionVisitor) {
+        visitor.visit_binary(self)
+    }
+}
+
+#[derive(Debug)]
+pub enum BinaryOp {
+    Plus,
+    Minus,
+    Eq,
+    Neq,
+    And,
+    Or,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+    Mult,
+    Div,
+    Mod,
+}
+
+#[derive(Debug)]
+pub struct Unary {
+    pub op: UnaryOp,
+    pub right: Box<dyn Expression>,
+}
+
+impl Expression for Unary {
+    fn accept(&self, visitor: &mut dyn ExpressionVisitor) {
+        visitor.visit_unary(self)
+    }
+}
+
+#[derive(Debug)]
+pub enum UnaryOp {
+    Minus,
+    Not,
+}

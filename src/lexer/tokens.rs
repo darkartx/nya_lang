@@ -264,39 +264,53 @@ impl Tokens<'_> {
     }
 
     fn read_sign(&mut self) -> Result<Token, Error> {
-        match self.current_char {
-            Some('.') => {
-                self.advance();
-                if let Some('.') = self.current_char {
-                    self.advance()
-                }
-            }
-            Some(ch) if is_sign_char(ch) => self.advance(),
-            Some(ch) => {
+        let token_type = match (self.current_char, self.next_char) {
+            (Some('.'), Some('.')) => self.advance_twice_and_return_tt(TokenType::Range),
+            (Some('.'), _) => self.advance_and_return_tt(TokenType::Dot),
+            (Some('='), Some('=')) => self.advance_twice_and_return_tt(TokenType::Eq),
+            (Some('='), _) => self.advance_and_return_tt(TokenType::Assign),
+            (Some('!'), Some('=')) => self.advance_twice_and_return_tt(TokenType::Neq),
+            (Some('!'), _) => self.advance_and_return_tt(TokenType::Not),
+            (Some('&'), Some('&')) => self.advance_twice_and_return_tt(TokenType::And),
+            (Some('|'), Some('|')) => self.advance_twice_and_return_tt(TokenType::Or),
+            (Some('<'), Some('=')) => self.advance_twice_and_return_tt(TokenType::Lte),
+            (Some('<'), _) => self.advance_and_return_tt(TokenType::Lt),
+            (Some('>'), Some('=')) => self.advance_twice_and_return_tt(TokenType::Gte),
+            (Some('>'), _) => self.advance_and_return_tt(TokenType::Gt),
+            (Some('+'), _) => self.advance_and_return_tt(TokenType::Plus),
+            (Some('-'), _) => self.advance_and_return_tt(TokenType::Minus),
+            (Some('*'), _) => self.advance_and_return_tt(TokenType::Mult),
+            (Some('/'), _) => self.advance_and_return_tt(TokenType::Div),
+            (Some('%'), _) => self.advance_and_return_tt(TokenType::Mod),
+            (Some(';'), _) => self.advance_and_return_tt(TokenType::Semicolon),
+            (Some(','), _) => self.advance_and_return_tt(TokenType::Comma),
+            (Some('('), _) => self.advance_and_return_tt(TokenType::Lparen),
+            (Some(')'), _) => self.advance_and_return_tt(TokenType::Rparen),
+            (Some('{'), _) => self.advance_and_return_tt(TokenType::Lbrace),
+            (Some('}'), _) => self.advance_and_return_tt(TokenType::Rbrace),
+            (Some('\n'), _) => self.advance_and_return_tt(TokenType::NewLine),
+            (None, _) => self.advance_and_return_tt(TokenType::Eof),
+            (Some(ch), _) => {
                 return Err(self.make_error(ErrorKind::UnexpectedChar(
                     UnexpectedCharError(ch)
                 )))
             }
-            None => {}
-        }
-
-        let token_type = match self.lexeme.as_str() {
-            "=" => TokenType::Assign,
-            ";" => TokenType::Semicolon,
-            "+" => TokenType::Plus,
-            "*" => TokenType::Mult,
-            "(" => TokenType::Lparen,
-            ")" => TokenType::Rparen,
-            "," => TokenType::Comma,
-            "-" => TokenType::Minus,
-            "." => TokenType::Dot,
-            ".." => TokenType::Range,
-            "\n" => TokenType::NewLine,
-            "" => TokenType::Eof,
-            _ => unreachable!()
         };
 
         Ok(self.make_token(token_type))
+    }
+
+    #[inline]
+    fn advance_twice_and_return_tt(&mut self, token_type: TokenType) -> TokenType {
+        self.advance();
+        self.advance();
+        token_type
+    }
+
+    #[inline]
+    fn advance_and_return_tt(&mut self, token_type: TokenType) -> TokenType {
+        self.advance();
+        token_type
     }
 
     fn skip_whitespaces(&mut self) {
@@ -339,11 +353,6 @@ fn is_whitespace_char(ch: char) -> bool {
 #[inline]
 fn is_new_line_char(ch: char) -> bool {
     ch == '\n'
-}
-
-#[inline]
-fn is_sign_char(ch: char) -> bool {
-    matches!(ch, '=' | '+' | ';' | '*' | '(' | ')' | ',' | '-' | '\n')
 }
 
 #[inline]
