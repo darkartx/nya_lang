@@ -75,6 +75,22 @@ pub enum BinaryOp {
     Mult,
     Div,
     Mod,
+    Assign,
+    AssignPlus,
+    AssignMinus,
+    AssignMult,
+    AssignDiv,
+    AssignMod,
+    AssignBitAnd,
+    AssignBitOr,
+    AssignBitXor,
+    AssignShiftLeft,
+    AssignShiftRight,
+    BitOr,
+    BitAnd,
+    BitXor,
+    ShiftLeft,
+    ShiftRight,
 }
 
 #[derive(Debug)]
@@ -99,4 +115,38 @@ impl Expression for Unary {
 pub enum UnaryOp {
     Minus,
     Not,
+    BitNot,
+}
+
+#[derive(Debug)]
+pub struct If {
+    pub condition: Box<dyn Expression>,
+    pub consequence: Box<dyn Statement>,
+    pub alternative: Option<Box<dyn Statement>>,
+}
+
+impl Into<Box<dyn Expression>> for If {
+    fn into(self) -> Box<dyn Expression> {
+        Box::new(self)
+    }
+}
+
+impl Expression for If {
+    fn accept(&self, visitor: &mut dyn ExpressionVisitor) {
+        visitor.visit_if(self);
+    }
+}
+
+impl If {
+    pub fn new(
+        condition: Box<dyn Expression>,
+        consequence: Box<dyn Statement>,
+        alternative: Option<Box<dyn Statement>>
+    ) -> Self {
+        Self {
+            condition,
+            consequence,
+            alternative
+        }
+    }
 }

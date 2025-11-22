@@ -69,3 +69,26 @@ impl Expr {
         Self { expression }
     }
 }
+
+#[derive(Debug)]
+pub struct Block {
+    pub statements: Vec<Box<dyn Statement>>,
+}
+
+impl Into<Box<dyn Statement>> for Block {
+    fn into(self) -> Box<dyn Statement> {
+        Box::new(self)
+    }
+}
+
+impl Statement for Block {
+    fn accept(&self, visitor: &mut dyn StatementVisitor) {
+        visitor.visit_block(self);
+    }
+}
+
+impl Block {
+    pub fn new(statements: Vec<Box<dyn Statement>>) -> Self {
+        Self { statements }
+    }
+}

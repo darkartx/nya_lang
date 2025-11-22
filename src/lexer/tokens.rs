@@ -291,23 +291,49 @@ impl Tokens<'_> {
             (Some('!'), Some('=')) => self.advance_twice_and_return_tt(TokenType::Neq),
             (Some('!'), _) => self.advance_and_return_tt(TokenType::Not),
             (Some('&'), Some('&')) => self.advance_twice_and_return_tt(TokenType::And),
+            (Some('&'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignBitAnd),
+            (Some('&'), _) => self.advance_and_return_tt(TokenType::BitAnd),
             (Some('|'), Some('|')) => self.advance_twice_and_return_tt(TokenType::Or),
-            (Some('<'), Some('=')) => self.advance_twice_and_return_tt(TokenType::Lte),
-            (Some('<'), _) => self.advance_and_return_tt(TokenType::Lt),
-            (Some('>'), Some('=')) => self.advance_twice_and_return_tt(TokenType::Gte),
-            (Some('>'), _) => self.advance_and_return_tt(TokenType::Gt),
+            (Some('|'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignBitOr),
+            (Some('|'), _) => self.advance_and_return_tt(TokenType::BitOr),
+            (Some('<'), _) => {
+                self.advance();
+                match (self.current_char, self.next_char) {
+                    (Some('='), _) => self.advance_and_return_tt(TokenType::Lte),
+                    (Some('<'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignShiftLeft),
+                    (Some('<'), _) => self.advance_and_return_tt(TokenType::ShiftLeft),
+                    _ => TokenType::Lt
+                }
+            }
+            (Some('>'), _) => {
+                self.advance();
+                match (self.current_char, self.next_char) {
+                    (Some('='), _) => self.advance_and_return_tt(TokenType::Gte),
+                    (Some('>'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignShiftRight),
+                    (Some('>'), _) => self.advance_and_return_tt(TokenType::ShiftRight),
+                    _ => TokenType::Gt
+                }
+            }
+            (Some('+'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignPlus),
             (Some('+'), _) => self.advance_and_return_tt(TokenType::Plus),
+            (Some('-'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignMinus),
             (Some('-'), _) => self.advance_and_return_tt(TokenType::Minus),
+            (Some('*'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignMult),
             (Some('*'), _) => self.advance_and_return_tt(TokenType::Mult),
+            (Some('/'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignDiv),
+            (Some('/'), Some('/')) => return self.read_singleline_comment(),
             (Some('/'), _) => self.advance_and_return_tt(TokenType::Div),
+            (Some('%'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignMod),
             (Some('%'), _) => self.advance_and_return_tt(TokenType::Mod),
+            (Some('^'), Some('=')) => self.advance_twice_and_return_tt(TokenType::AssignBitXor),
+            (Some('^'), _) => self.advance_and_return_tt(TokenType::BitXor),
+            (Some('~'), _) => self.advance_and_return_tt(TokenType::BitNot),
             (Some(';'), _) => self.advance_and_return_tt(TokenType::Semicolon),
             (Some(','), _) => self.advance_and_return_tt(TokenType::Comma),
             (Some('('), _) => self.advance_and_return_tt(TokenType::Lparen),
             (Some(')'), _) => self.advance_and_return_tt(TokenType::Rparen),
             (Some('{'), _) => self.advance_and_return_tt(TokenType::Lbrace),
             (Some('}'), _) => self.advance_and_return_tt(TokenType::Rbrace),
-            (Some('\n'), _) => self.advance_and_return_tt(TokenType::NewLine),
             (None, _) => self.advance_and_return_tt(TokenType::Eof),
             (Some(ch), _) => {
                 return Err(self.make_error(ErrorKind::UnexpectedChar(
@@ -317,6 +343,18 @@ impl Tokens<'_> {
         };
 
         Ok(self.make_token(token_type))
+    }
+
+    fn read_singleline_comment(&mut self) -> Result<Token, Error> {
+        loop {
+            match self.current_char {
+                Some('\n') => break,
+                None => break,
+                _ => self.advance(),
+            }
+        }
+
+        Ok(self.make_token(TokenType::SingleLineComment))
     }
 
     #[inline]
@@ -366,7 +404,7 @@ fn is_number_char(ch: char) -> bool {
 
 #[inline]
 fn is_whitespace_char(ch: char) -> bool {
-    ch.is_whitespace() && ch != '\n'
+    ch.is_whitespace()
 }
 
 #[inline]

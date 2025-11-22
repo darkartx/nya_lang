@@ -1,182 +1,224 @@
-Program        ::= { Statement }
+//////////////////////////////
+// PROGRAM
+//////////////////////////////
 
-//
-// === STATEMENTS ===
-//
+program           = { statement } ;
 
-Statement      ::= LetStmt
-                 | ExprStmt
-                 | BlockStmt
-                 | IfStmt
-                 | WhileStmt
-                 | ForStmt
-                 | ReturnStmt
-                 | ClassStmt
-                 | FunctionDecl
 
-Semicolon      ::= ";"
+//////////////////////////////
+// STATEMENTS
+//////////////////////////////
 
-LetStmt        ::= "let" Identifier "=" Expression Semicolon
+statement         = block
+                  | let_statement
+                  | const_statement
+                  | function_statement
+                  | class_statement
+                  | return_statement
+                  | if_statement
+                  | while_statement
+                  | for_statement
+                  | expression_statement ;
 
-ExprStmt       ::= Expression Semicolon
+block             = "{" { statement } "}" ;
 
-BlockStmt      ::= "{" { Statement } "}"
+let_statement     = "let" identifier ( "=" expression )? semicolon ;
+const_statement   = "const" identifier "=" expression semicolon ;
 
-IfStmt         ::= "if" "(" Expression ")" Statement
-                   [ "else" Statement ]
+function_statement = "function" identifier "(" parameter_list? ")"
+                     block ;
 
-WhileStmt      ::= "while" "(" Expression ")" Statement
+class_statement    = "class" identifier
+                     ( "extends" identifier )?
+                     "{" { class_member } "}" ;
 
-ForStmt        ::= "for" "("
-                       [ ForInit ] ";" 
-                       [ Expression ] ";" 
-                       [ Expression ]
-                   ")" Statement
+class_member       = ( "static"? method_definition )
+                   | property_definition ;
 
-ForInit        ::= LetStmt | Expression
+method_definition  = identifier "(" parameter_list? ")"
+                     block ;
 
-ReturnStmt     ::= "return" [ Expression ] Semicolon
+property_definition = identifier ( "=" expression )? semicolon ;
 
-//
-// === DECLARATIONS ===
-//
+return_statement   = "return" expression? semicolon ;
 
-FunctionDecl   ::= "function" [ "async" ] Identifier "(" ParamList ")" BlockStmt
+if_statement       = "if" "(" expression ")"
+                     statement
+                     ( "else" statement )? ;
 
-ParamList      ::= [ Identifier { "," Identifier } ]
+while_statement    = "while" "(" expression ")" statement ;
 
-ClassStmt      ::= "class" Identifier "{" { ClassMember } "}"
+for_statement      = "for" "("
+                       ( let_statement
+                       | expression_statement
+                       | ";" )
+                     expression? ";"
+                     expression?
+                     ")"
+                     statement ;
 
-ClassMember    ::= FunctionDecl
-                 | FieldDecl
+expression_statement = expression semicolon ;
 
-FieldDecl      ::= Identifier Semicolon
+parameter_list     = identifier { "," identifier } ;
 
-//
-// === EXPRESSIONS ===
-//
+semicolon          = ";"? ;
 
-// Pratt-parser friendly precedence
-Expression     ::= Assignment
 
-Assignment     ::= LogicOr
-                 | MemberExpr "=" Assignment
-                 | Identifier "=" Assignment
+//////////////////////////////
+// EXPRESSIONS
+//////////////////////////////
 
-LogicOr        ::= LogicAnd { "||" LogicAnd }
-LogicAnd       ::= Equality { "&&" Equality }
-Equality       ::= Comparison { ( "==" | "!=" ) Comparison }
-Comparison     ::= Term { ( "<" | "<=" | ">" | ">=" ) Term }
-Term           ::= Factor { ( "+" | "-" ) Factor }
-Factor         ::= Unary { ( "*" | "/" | "%" ) Unary }
+expression         = assignment ;
 
-Unary          ::= ( "!" | "-" ) Unary
-                 | Primary
+assignment         = logical_or
+                     { assignment_op assignment } ;
 
-Primary        ::= Literal
-                 | Identifier
-                 | "(" Expression ")"
-                 | FunctionExpr
-                 | AwaitExpr
-                 | ArrayLiteral
-                 | ObjectLiteral
-                 | FString
+assignment_op      = "=" | "+=" | "-=" | "*=" | "/=" | "%="
+                   | "&=" | "|=" | "^="
+                   | "<<=" | ">>=" | ">>>=" ;
 
-//
-// === CALLS AND MEMBERS ===
-//
 
-Postfix        ::= Primary { PostfixOp }
+//////////////////////////////
+// PRECEDENCE (HIGH → LOW)
+//////////////////////////////
 
-PostfixOp      ::= "(" ArgList ")"
-                 | "." Identifier
+logical_or         = logical_and { "||" logical_and } ;
 
-ArgList        ::= [ Expression { "," Expression } ]
+logical_and        = comparison { "&&" comparison } ;
 
-//
-// === OBJECT LITERAL ===
-//
+comparison         = equality
+                     { ( "<" | "<=" | ">" | ">=" ) equality } ;
 
-ObjectLiteral  ::= "{" [ ObjectField { "," ObjectField } ] "}"
+equality           = bit_or
+                     { ( "==" | "!=" ) bit_or } ;
 
-ObjectField    ::= Identifier ":" Expression
+bit_or             = bit_xor { "|" bit_xor } ;
+bit_xor            = bit_and { "^" bit_and } ;
+bit_and            = shift { "&" shift } ;
 
-//
-// === ARRAY LITERAL ===
-//
+shift              = additive
+                     { ( "<<" | ">>" | ">>>" ) additive } ;
 
-ArrayLiteral   ::= "[" [ Expression { "," Expression } ] "]"
+additive           = multiplicative
+                     { ( "+" | "-" ) multiplicative } ;
 
-//
-// === FUNCTION EXPRESSION ===
-//
+multiplicative     = unary
+                     { ( "*" | "/" | "%" ) unary } ;
 
-FunctionExpr   ::= "function" [ "async" ] "(" ParamList ")" BlockStmt
+unary              = ( "!" | "~" | "-" ) unary
+                   | postfix ;
 
-//
-// === AWAIT ===
-//
+postfix            = primary
+                   { call_suffix
+                   | member_suffix
+                   | index_suffix } ;
 
-AwaitExpr      ::= "await" Primary
+call_suffix        = "(" argument_list? ")" ;
+member_suffix      = "." identifier ;
+index_suffix       = "[" expression "]" ;
 
-//
-// === LITERALS ===
-//
+argument_list      = expression { "," expression } ;
 
-Literal        ::= NumberLiteral
-                 | StringLiteral
-                 | "true"
-                 | "false"
-                 | "null"
 
-//
-// === IDENTIFIERS ===
-//
+//////////////////////////////
+// PRIMARY
+//////////////////////////////
 
-Identifier     ::= IdentifierStart { IdentifierPart }
+primary            = literal
+                   | identifier
+                   | "(" expression ")"
+                   | fstring ;
 
-IdentifierStart ::= Letter | "_"
-IdentifierPart  ::= Letter | Digit | "_"
 
-//
-// === NUMBER LITERALS ===
-//
+//////////////////////////////
+// LITERALS
+//////////////////////////////
 
-NumberLiteral  ::= IntLiteral
-                 | FloatLiteral
+literal            = integer_literal
+                   | float_literal
+                   | string_literal
+                   | boolean_literal
+                   | null_literal ;
 
-IntLiteral     ::= Digit { Digit }
+boolean_literal    = "true" | "false" ;
+null_literal       = "null" ;
 
-FloatLiteral   ::= Digit { Digit } "." Digit { Digit }
-                 | Digit "." Digit
 
-//
-// === STRINGS ===
-//
+//////////////////////////////
+// IDENTIFIERS
+//////////////////////////////
 
-StringLiteral  ::= "\"" { StringChar } "\""
-StringChar     ::= ? any character except quote and backslash ?
-                 | "\\" Escaped
+identifier         = IDENTIFIER_TOKEN ;
 
-Escaped        ::= "\"" | "n" | "t" | "\\" | "r"
 
-//
-// === F-STRINGS ===
-//
+//////////////////////////////
+// NUMBERS
+//////////////////////////////
 
-FString        ::= "f\"" { FStringPart } "\""
+integer_literal    = DEC_INT
+                   | BIN_INT
+                   | OCT_INT
+                   | HEX_INT ;
 
-FStringPart    ::= FStringText
-                 | FStringInterp
+float_literal      = DEC_FLOAT ;
 
-// Everything until '{' or end of string:
-FStringText    ::= { ? normal chars except { } ? }
+DEC_INT            = DIGIT { DIGIT } ;
+BIN_INT            = "0b" BIN_DIGIT { BIN_DIGIT } ;
+OCT_INT            = "0o" OCT_DIGIT { OCT_DIGIT } ;
+HEX_INT            = "0x" HEX_DIGIT { HEX_DIGIT } ;
 
-FStringInterp  ::= "{" Expression "}"
+DEC_FLOAT          = DIGIT+ "." DIGIT+ ( EXPONENT )?
+                   | DIGIT+ EXPONENT ;
 
-//
-// === MISC ===
-//
+EXPONENT           = ( "e" | "E" ) ( "+" | "-" )? DIGIT+ ;
 
-Digit          ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
-Letter         ::= "a" | ... | "z" | "A" | ... | "Z"
+DIGIT              = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+BIN_DIGIT          = "0" | "1" ;
+OCT_DIGIT          = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" ;
+HEX_DIGIT          = DIGIT
+                   | "a" | "b" | "c" | "d" | "e" | "f"
+                   | "A" | "B" | "C" | "D" | "E" | "F" ;
+
+
+//////////////////////////////
+// STRINGS
+//////////////////////////////
+
+string_literal     = "\"" { string_char } "\""
+                   | "'" { string_char } "'" ;
+
+string_char        = any_char_except_quote_or_backslash
+                   | escape_sequence ;
+
+escape_sequence    = "\\" ( "\"" | "'" | "\\" | "n" | "t" | "r" ) ;
+
+
+//////////////////////////////
+// F-STRINGS
+//////////////////////////////
+
+fstring            = "f\"" { fstring_part } "\"" ;
+
+fstring_part       = string_char
+                   | interpolation ;
+
+interpolation      = "${" expression "}" ;
+
+
+//////////////////////////////
+// COMMENTS
+//////////////////////////////
+
+comment            = "//" { not_newline } newline
+                   | "/*" { anything } "*/" ;
+
+
+//////////////////////////////
+// TOKENS
+//////////////////////////////
+
+IDENTIFIER_TOKEN   = LETTER { LETTER | DIGIT | "_" } ;
+
+LETTER             = "a" | ... | "z"
+                   | "A" | ... | "Z"
+                   | "_" ;

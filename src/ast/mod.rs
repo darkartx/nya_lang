@@ -25,6 +25,7 @@ pub trait ExpressionVisitor {
     fn visit_literal(&mut self, literal: &Literal);
     fn visit_binary(&mut self, binary: &Binary);
     fn visit_unary(&mut self, unary: &Unary);
+    fn visit_if(&mut self, if_expr: &If);
 }
 
 pub trait Statement: fmt::Debug {
@@ -39,6 +40,7 @@ pub trait StatementVisitor {
     fn visit_let(&mut self, let_statement: &Let);
     fn visit_return(&mut self, return_statement: &Return);
     fn visit_expr(&mut self, expr: &Expr);
+    fn visit_block(&mut self, block: &Block);
 }
 
 #[derive(Debug, Default)]

@@ -10,11 +10,16 @@ type TT = TokenType;
 type BoxStatement = Box<dyn ast::Statement>;
 type BoxExpression = Box<dyn ast::Expression>;
 
-const EXPRESSION_START_TTS: [TT; 9] = [
-    TT::IntNumber, TT::String, TT::True, TT::False, TT::FloatNumber, TT::Identifier, TT::Lparen, TT::Minus, TT::Not
+const EXPRESSION_START_TTS: [TT; 11] = [
+    TT::IntNumber, TT::String, TT::True, TT::False, TT::FloatNumber, TT::Identifier, TT::Lparen, TT::Minus, TT::Not,
+    TT::BitNot, TT::If,
 ];
 
-const TERMINAL_TTS: [TT; 2] = [TT::NewLine, TT::Semicolon];
+const TERMINAL_TTS: [TT; 1] = [TT::Semicolon];
+const ASSIGN_OP_TTS: [TT; 11] = [
+    TT::Assign, TT::AssignBitAnd, TT::AssignBitOr, TT::AssignBitXor, TT::AssignDiv, TT::AssignMinus, TT::AssignMod,
+    TT::AssignMult, TT::AssignPlus, TT::AssignShiftLeft, TT::AssignShiftRight
+];
 
 #[derive(Debug)]
 pub(super) struct TokensParser<'a> {
@@ -46,8 +51,6 @@ impl TokensParser<'_> {
         let mut statements = vec![];
 
         loop {
-            self.skip_newlines()?;
-
             if self.current_token_type() == TokenType::Eof {
                 break;
             }
@@ -64,11 +67,12 @@ impl TokensParser<'_> {
 
     fn parse_statement(&mut self) -> Result<BoxStatement, Error> {
         match self.current_token_type() {
-            TT::Let => self.parse_let_statement().map(Into::into),
-            TT::Return => self.parse_retrun_statement().map(Into::into),
+            TT::Let => self.parse_let_statement(),
+            TT::Return => self.parse_retrun_statement(),
+            TT::Lbrace => self.parse_block(),
             _ => {
                 if self.current_token_type_is(&EXPRESSION_START_TTS) {
-                    self.parse_expression_statement().map(Into::into)
+                    self.parse_expression_statement()
                 } else {
                     let mut expected = vec![TT::Let, TT::Return];
                     expected.extend(EXPRESSION_START_TTS);
@@ -99,6 +103,7 @@ impl TokensParser<'_> {
         };
 
         self.parse_terminal()?;
+
         let statement = ast::Let::new(identifier, expression);
 
         Ok(self.make_statement_node(statement, Some(token)))
@@ -119,6 +124,20 @@ impl TokensParser<'_> {
         Ok(self.make_statement_node(statement, Some(token)))
     }
 
+    fn parse_block(&mut self) -> Result<BoxStatement, Error> {
+        let token = self.expect_advance(&[TT::Lbrace])?;
+        let mut statements = vec![];
+
+        while !self.current_token_type_is(&[TT::Rbrace]) {
+            statements.push(self.parse_statement()?);
+        }
+
+        self.advance()?;
+
+        let statement = ast::Block::new(statements);
+        Ok(self.make_statement_node(statement, Some(token)))
+    }
+
     fn parse_expression_statement(&mut self) -> Result<BoxStatement, Error> {
         let token = self.current_token.clone();
         let expression = self.parse_expression()?;
@@ -129,46 +148,170 @@ impl TokensParser<'_> {
     }
 
     fn parse_expression(&mut self) -> Result<BoxExpression, Error> {
-        self.parse_assigment()
+        match self.current_token_type() {
+            TT::If => self.parse_if(),
+            _ => self.parse_assigment()
+        }
+    }
+
+    fn parse_if(&mut self) -> Result<BoxExpression, Error> {
+        let token = self.expect_advance(&[TT::If])?;
+        self.expect_advance(&[TT::Lparen])?;
+        let condition = self.parse_expression()?;
+        self.expect_advance(&[TT::Rparen])?;
+        let consequence = self.parse_statement()?;
+
+        let alternative = if self.current_token_type_is(&[TT::Else]) {
+            self.advance()?;
+            Some(self.parse_statement()?)
+        } else {
+            None
+        };
+
+        let expression = ast::If::new(condition, consequence, alternative);
+        Ok(self.make_expression_node(expression, Some(token)))
     }
 
     fn parse_assigment(&mut self) -> Result<BoxExpression, Error> {
-        self.parse_logic_or()
+        let mut result = self.parse_logic_and()?;
+
+        if self.current_token_type_is(&ASSIGN_OP_TTS) {
+            let token = self.advance()?;
+            let right = self.parse_logic_or()?;
+            let op = match token.token_type {
+                TT::Assign => ast::BinaryOp::Assign,
+                TT::AssignBitAnd => ast::BinaryOp::AssignBitAnd,
+                TT::AssignBitOr => ast::BinaryOp::AssignBitOr,
+                TT::AssignBitXor => ast::BinaryOp::AssignBitXor,
+                TT::AssignDiv => ast::BinaryOp::AssignDiv,
+                TT::AssignMinus => ast::BinaryOp::AssignMinus,
+                TT::AssignMod => ast::BinaryOp::AssignMod,
+                TT::AssignMult => ast::BinaryOp::AssignMult,
+                TT::AssignPlus => ast::BinaryOp::AssignPlus,
+                TT::AssignShiftLeft => ast::BinaryOp::AssignShiftLeft,
+                TT::AssignShiftRight => ast::BinaryOp::AssignShiftRight,
+                _ => unreachable!(),
+            };
+
+            result = self.make_binary_expression_node(result, op, right);
+        }
+
+        Ok(result)
     }
 
     fn parse_logic_or(&mut self) -> Result<BoxExpression, Error> {
-        self.parse_logic_and()
+        let mut result = self.parse_logic_and()?;
+
+        if self.current_token_type_is(&[TT::Or]) {
+            self.advance()?;
+            let right = self.parse_logic_or()?;
+            let op = ast::BinaryOp::Or;
+
+            result = self.make_binary_expression_node(result, op, right);
+        }
+
+        Ok(result)
     }
 
     fn parse_logic_and(&mut self) -> Result<BoxExpression, Error> {
-        self.parse_equality()
+        let mut result = self.parse_equality()?;
+
+        if self.current_token_type_is(&[TT::And]) {
+            self.advance()?;
+            let right = self.parse_logic_and()?;
+            let op = ast::BinaryOp::And;
+
+            result = self.make_binary_expression_node(result, op, right);
+        }
+
+        Ok(result)
     }
 
     fn parse_equality(&mut self) -> Result<BoxExpression, Error> {
-        self.parse_comparsion()
+        let mut result = self.parse_bit_or()?;
+
+        if self.current_token_type_is(&[TT::Eq, TT::Neq, TT::Gt, TT::Gte, TT::Lt, TT::Lte]) {
+            let token = self.advance()?;
+            let right = self.parse_equality()?;
+            let op = match token.token_type {
+                TT::Eq => ast::BinaryOp::Eq,
+                TT::Neq => ast::BinaryOp::Neq,
+                TT::Gt => ast::BinaryOp::Gt,
+                TT::Gte => ast::BinaryOp::Gte,
+                TT::Lt => ast::BinaryOp::Lt,
+                TT::Lte => ast::BinaryOp::Lte,
+                _ => unreachable!(),
+            };
+
+            result = self.make_binary_expression_node(result, op, right);
+        }
+
+        Ok(result)
     }
 
-    fn parse_comparsion(&mut self) -> Result<BoxExpression, Error> {
-        self.parse_term()
+    fn parse_bit_or(&mut self) -> Result<BoxExpression, Error> {
+        let mut result = self.parse_bit_and()?;
+
+        if self.current_token_type_is(&[TT::BitOr, TT::BitXor]) {
+            let token = self.advance()?;
+            let right = self.parse_bit_or()?;
+            let op = match token.token_type {
+                TT::BitOr => ast::BinaryOp::BitOr,
+                TT::BitXor => ast::BinaryOp::BitXor,
+                _ => unreachable!(),
+            };
+
+            result = self.make_binary_expression_node(result, op, right);
+        }
+
+        Ok(result)
+    }
+
+    fn parse_bit_and(&mut self) -> Result<BoxExpression, Error> {
+        let mut result = self.parse_shift()?;
+
+        if self.current_token_type_is(&[TT::BitAnd]) {
+            self.advance()?;
+            let right = self.parse_bit_and()?;
+            let op = ast::BinaryOp::BitAnd;
+
+            result = self.make_binary_expression_node(result, op, right);
+        }
+
+        Ok(result)
+    }
+
+    fn parse_shift(&mut self) -> Result<BoxExpression, Error> {
+        let mut result = self.parse_term()?;
+
+        if self.current_token_type_is(&[TT::ShiftLeft, TT::ShiftRight]) {
+            let token = self.advance()?;
+            let right = self.parse_shift()?;
+            let op = match token.token_type {
+                TT::ShiftLeft => ast::BinaryOp::ShiftLeft,
+                TT::ShiftRight => ast::BinaryOp::ShiftRight,
+                _ => unreachable!()
+            };
+
+            result = self.make_binary_expression_node(result, op, right);
+        }
+
+        Ok(result)
     }
 
     fn parse_term(&mut self) -> Result<BoxExpression, Error> {
         let mut result = self.parse_factor()?;
 
-        self.skip_newlines()?;
-
         if self.current_token_type_is(&[TT::Plus, TT::Minus]) {
             let token = self.advance()?;
-            let right = self.parse_factor()?;
+            let right = self.parse_term()?;
             let op = match token.token_type {
                 TT::Plus => ast::BinaryOp::Plus,
                 TT::Minus => ast::BinaryOp::Minus,
                 _ => unreachable!(),
             };
-            let token = result.token().cloned();
-            let expression = ast::Binary{ left: result, op, right };
 
-            result = self.make_expression_node(expression, token)
+            result = self.make_binary_expression_node(result, op, right);
         }
 
         Ok(result)
@@ -177,46 +320,38 @@ impl TokensParser<'_> {
     fn parse_factor(&mut self) -> Result<BoxExpression, Error> {
         let mut result = self.parse_unary()?;
 
-        self.skip_newlines()?;
-
         if self.current_token_type_is(&[TT::Mult, TT::Div, TT::Mod]) {
             let token = self.advance()?;
-            let right = self.parse_unary()?;
+            let right = self.parse_factor()?;
             let op = match token.token_type {
                 TT::Mult => ast::BinaryOp::Mult,
                 TT::Div => ast::BinaryOp::Div,
                 TT::Mod => ast::BinaryOp::Mod,
                 _ => unreachable!(),
             };
-            let token = result.token().cloned();
-            let expression = ast::Binary{ left: result, op, right };
 
-            result = self.make_expression_node(expression, token)
+            result = self.make_binary_expression_node(result, op, right);
         }
 
         Ok(result)
     }
 
     fn parse_unary(&mut self) -> Result<BoxExpression, Error> {
-        let unary_token = if self.current_token_type_is(&[TT::Minus, TT::Not]) {
-            Some(self.advance()?)
-        } else {
-            None
-        };
-
-        let mut result = self.parse_primary()?;
+        let unary_token = self.advance_if(&[TT::Minus, TT::Not, TT::BitNot])?;
 
         if let Some(unary_token) = unary_token {
+            let expression = self.parse_unary()?;
             let op = match unary_token.token_type {
                 TT::Minus => ast::UnaryOp::Minus,
                 TT::Not => ast::UnaryOp::Not,
+                TT::BitNot => ast::UnaryOp::BitNot,
                 _ => unreachable!(),
             };
-            let expression = ast::Unary{op, right: result};
-            result = self.make_expression_node(expression, Some(unary_token))
+            let expression = ast::Unary{op, right: expression};
+            Ok(self.make_expression_node(expression, Some(unary_token)))
+        } else {
+            self.parse_primary()
         }
-
-        Ok(result)
     }
 
     fn parse_primary(&mut self) -> Result<BoxExpression, Error> {
@@ -287,7 +422,6 @@ impl TokensParser<'_> {
 
     fn parse_group(&mut self) -> Result<BoxExpression, Error> {
         self.expect_advance(&[TT::Lparen])?;
-        self.skip_newlines()?;
         let result = self.parse_expression()?;
         self.expect_advance(&[TT::Rparen])?;
 
@@ -296,7 +430,7 @@ impl TokensParser<'_> {
 
     fn parse_terminal(&mut self) -> Result<(), Error> {
         match self.current_token_type() {
-            TT::Semicolon | TT::NewLine => { self.advance()?; },
+            TT::Semicolon => { self.advance()?; },
             TT::Rbrace | TT::Eof => {},
             _ => {
                 return Err(Error::new(
@@ -328,20 +462,6 @@ impl TokensParser<'_> {
         }
     }
 
-    fn skip_newlines(&mut self) -> Result<(), Error> {
-        self.skip_tokens(&[
-            TokenType::NewLine,
-        ])
-    }
-
-    fn skip_tokens(&mut self, token_types: &[TokenType]) -> Result<(), Error> {
-        while self.current_token_type_is(token_types) {
-            self.advance()?;
-        }
-
-        Ok(())
-    }
-
     fn current_token_type_is(&self, token_types: &[TokenType]) -> bool {
         token_types.iter().any(|tt| *tt == self.current_token.token_type)
     }
@@ -366,8 +486,29 @@ impl TokensParser<'_> {
         ast::Node::new(id, kind, token).into()
     }
 
+    fn make_binary_expression_node(&mut self, left: BoxExpression, op: ast::BinaryOp, right: BoxExpression) -> BoxExpression {
+        let token = left.token().cloned();
+        let expression = ast::Binary{ left, op, right };
+        
+        self.make_expression_node(expression, token)
+    }
+
+    fn advance_if(&mut self, token_type: &[TokenType]) -> Result<Option<Token>, Error> {
+        if self.current_token_type_is(token_type) {
+            self.advance().map(|r| Some(r))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn advance(&mut self) -> Result<Token, Error> {
-        let next_token = self.tokens.next_token()?;
+        let next_token = loop {
+            let token = self.tokens.next_token()?;
+
+            if token.token_type != TT::SingleLineComment {
+                break token;
+            }
+        };
         let current_token = mem::replace(&mut self.peek_token, next_token);
         let result = mem::replace(&mut self.current_token, current_token);
 

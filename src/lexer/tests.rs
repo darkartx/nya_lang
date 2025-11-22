@@ -24,15 +24,12 @@ let nothing = null;
 print(a, b, c, greeting, ok, nope, nothing);
 "#;
     let test_cases = vec![
-        make_token(NewLine, "\n", Pos::new(0, 1, 1), 1),
-
         // let a = 10;
         make_token(Let, "let", Pos::new(1, 2, 1), 3),
         make_token(Identifier, "a", Pos::new(5, 2, 5), 1),
         make_token(Assign, "=", Pos::new(7, 2, 7), 1),
         make_token(IntNumber, "10", Pos::new(9, 2, 9), 2),
         make_token(Semicolon, ";", Pos::new(11, 2, 11), 1),
-        make_token(NewLine, "\n", Pos::new(12, 2, 12), 1),
 
         // let b = 3.14;
         make_token(Let, "let", Pos::new(13, 3, 1), 3),
@@ -40,7 +37,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Assign, "=", Pos::new(19, 3, 7), 1),
         make_token(FloatNumber, "3.14", Pos::new(21, 3, 9), 4),
         make_token(Semicolon, ";", Pos::new(25, 3, 13), 1),
-        make_token(NewLine, "\n", Pos::new(26, 3, 14), 1),
 
         // let c = a + b * 2;
         make_token(Let, "let", Pos::new(27, 4, 1), 3),
@@ -52,8 +48,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Mult, "*", Pos::new(41, 4, 15), 1),
         make_token(IntNumber, "2", Pos::new(43, 4, 17), 1),
         make_token(Semicolon, ";", Pos::new(44, 4, 18), 1),
-        make_token(NewLine, "\n", Pos::new(45, 4, 19), 1),
-        make_token(NewLine, "\n", Pos::new(46, 5, 1), 1),
 
         // let name = "Alice";
         make_token(Let, "let", Pos::new(47, 6, 1), 3),
@@ -61,7 +55,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Assign, "=", Pos::new(56, 6, 10), 1),
         make_token(String, "\"Alice\"", Pos::new(58, 6, 12), 7),
         make_token(Semicolon, ";", Pos::new(65, 6, 19), 1),
-        make_token(NewLine, "\n", Pos::new(66, 6, 20), 1),
 
         // let greeting = "Hello, " + name;
         make_token(Let, "let", Pos::new(67, 7, 1), 3),
@@ -71,8 +64,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Plus, "+", Pos::new(92, 7, 26), 1),
         make_token(Identifier, "name", Pos::new(94, 7, 28), 4),
         make_token(Semicolon, ";", Pos::new(98, 7, 32), 1),
-        make_token(NewLine, "\n", Pos::new(99, 7, 33), 1),
-        make_token(NewLine, "\n", Pos::new(100, 8, 1), 1),
 
         // let ok = true;
         make_token(Let, "let", Pos::new(101, 9, 1), 3),
@@ -80,7 +71,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Assign, "=", Pos::new(108, 9, 8), 1),
         make_token(True, "true", Pos::new(110, 9, 10), 4),
         make_token(Semicolon, ";", Pos::new(114, 9, 14), 1),
-        make_token(NewLine, "\n", Pos::new(115, 9, 15), 1),
 
         // let nope = false;
         make_token(Let, "let", Pos::new(116, 10, 1), 3),
@@ -88,7 +78,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Assign, "=", Pos::new(125, 10, 10), 1),
         make_token(False, "false", Pos::new(127, 10, 12), 5),
         make_token(Semicolon, ";", Pos::new(132, 10, 17), 1),
-        make_token(NewLine, "\n", Pos::new(133, 10, 18), 1),
 
         // let nothing = null;
         make_token(Let, "let", Pos::new(134, 11, 1), 3),
@@ -96,8 +85,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Assign, "=", Pos::new(146, 11, 13), 1),
         make_token(Null, "null", Pos::new(148, 11, 15), 4),
         make_token(Semicolon, ";", Pos::new(152, 11, 19), 1),
-        make_token(NewLine, "\n", Pos::new(153, 11, 20), 1),
-        make_token(NewLine, "\n", Pos::new(154, 12, 1), 1),
 
         // print(a, b, c, greeting, ok, nope, nothing);
         make_token(Identifier, "print", Pos::new(155, 13, 1), 5),
@@ -117,7 +104,6 @@ print(a, b, c, greeting, ok, nope, nothing);
         make_token(Identifier, "nothing", Pos::new(190, 13, 36), 7),
         make_token(Rparen, ")", Pos::new(197, 13, 43), 1),
         make_token(Semicolon, ";", Pos::new(198, 13, 44), 1),
-        make_token(NewLine, "\n", Pos::new(199, 13, 45), 1),
 
         // EOF
         make_token(Eof, "", Pos::new(200, 14, 1), 0),
@@ -229,46 +215,45 @@ fn test_numbers() {
 
 #[test]
 fn test_ops() {
-    let input = "+- == != &&|| > >= < <= */%";
-
-    let test_cases = vec![
-        // Plus
-        make_token(Plus, "+", Pos::new(0, 1, 1), 1),
-        // Minus
-        make_token(Minus, "-", Pos::new(1, 1, 2), 1),
-        // Eq
-        make_token(Eq, "==", Pos::new(3, 1, 4), 2),
-        // Neq
-        make_token(Neq, "!=", Pos::new(6, 1, 7), 2),
-        // And
-        make_token(And, "&&", Pos::new(9, 1, 10), 2),
-        // Or
-        make_token(Or, "||", Pos::new(11, 1, 12), 2),
-        // Gt
-        make_token(Gt, ">", Pos::new(14, 1, 15), 1),
-        // Gte
-        make_token(Gte, ">=", Pos::new(16, 1, 17), 2),
-        // Lt
-        make_token(Lt, "<", Pos::new(19, 1, 20), 1),
-        // Lte
-        make_token(Lte, "<=", Pos::new(21, 1, 22), 2),
-        // Mult
-        make_token(Mult, "*", Pos::new(24, 1, 25), 1),
-        // Div
-        make_token(Div, "/", Pos::new(25, 1, 26), 1),
-        // Mod
-        make_token(Mod, "%", Pos::new(26, 1, 27), 1),
-        // EOF
-        make_token(Eof, "", Pos::new(27, 1, 28), 0),
+    let test_cases = [
+        ("+", Plus),
+        ("-", Minus),
+        ("==", Eq),
+        ("!=", Neq),
+        ("&&", And),
+        ("||", Or),
+        (">", Gt),
+        (">=", Gte),
+        ("<", Lt),
+        ("<=", Lte),
+        ("*", Mult),
+        ("/", Div),
+        ("%", Mod),
+        ("=", Assign),
+        ("+=", AssignPlus),
+        ("-=", AssignMinus),
+        ("*=", AssignMult),
+        ("/=", AssignDiv),
+        ("%=", AssignMod),
+        ("&=", AssignBitAnd),
+        ("|=", AssignBitOr),
+        ("^=", AssignBitXor),
+        ("<<=", AssignShiftLeft),
+        (">>=", AssignShiftRight),
+        ("|", BitOr),
+        ("&", BitAnd),
+        ("^", BitXor),
+        ("<<", ShiftLeft),
+        (">>", ShiftRight),
+        ("~", BitNot),
     ];
 
-    let lexer = Lexer::new(input.to_string());
-    let mut tokens = lexer.tokens();
-
     for tc in test_cases {
+        let lexer = Lexer::new(tc.0.to_string());
+        let mut tokens = lexer.tokens();
         let token = tokens.next_token().unwrap();
 
-        assert_eq!(tc, token);
+        assert_eq!(tc.1, token.token_type);
     }
 }
 
