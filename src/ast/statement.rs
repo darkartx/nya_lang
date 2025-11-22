@@ -2,8 +2,14 @@ use super::*;
 
 #[derive(Debug)]
 pub struct Let {
-    identifier: Identifier,
-    expression: Option<Box<dyn Expression>>,
+    pub identifier: Box<dyn Expression>,
+    pub expression: Option<Box<dyn Expression>>,
+}
+
+impl Into<Box<dyn Statement>> for Let {
+    fn into(self) -> Box<dyn Statement> {
+        Box::new(self)
+    }
 }
 
 impl Statement for Let {
@@ -13,15 +19,53 @@ impl Statement for Let {
 }
 
 impl Let {
-    pub fn new(identifier: Identifier, expression: Option<Box<dyn Expression>>) -> Self {
+    pub fn new(identifier: Box<dyn Expression>, expression: Option<Box<dyn Expression>>) -> Self {
         Self { identifier, expression }
     }
+}
 
-    pub fn identifier(&self) -> &Identifier {
-        &self.identifier
+#[derive(Debug)]
+pub struct Return {
+    pub expression: Option<Box<dyn Expression>>,
+}
+
+impl Into<Box<dyn Statement>> for Return {
+    fn into(self) -> Box<dyn Statement> {
+        Box::new(self)
     }
+}
 
-    pub fn expression(&self) -> Option<&dyn Expression> {
-        self.expression.as_deref()
+impl Statement for Return {
+    fn accept(&self, visitor: &mut dyn StatementVisitor) {
+        visitor.visit_return(self)
+    }
+}
+
+impl Return {
+    pub fn new(expression: Option<Box<dyn Expression>>) -> Self {
+        Self { expression }
+    }
+}
+
+#[derive(Debug)]
+pub struct Expr {
+    pub expression: Box<dyn Expression>,
+}
+
+impl Into<Box<dyn Statement>> for Expr {
+    fn into(self) -> Box<dyn Statement> {
+        Box::new(self)
+    }
+}
+
+impl Statement for Expr {
+    fn accept(&self, visitor: &mut dyn StatementVisitor) {
+        visitor.visit_expr(self);
+    }
+}
+
+impl Expr {
+    pub fn new(expression: Box<dyn Expression>) -> Self {
+        Self { expression }
     }
 }

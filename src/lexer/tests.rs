@@ -272,6 +272,43 @@ fn test_ops() {
     }
 }
 
+#[test]
+fn test_keywords() {
+    let test_cases = [
+        ("let", Let),
+        ("const", Const),
+        ("fn", Fn),
+        ("async", Async),
+        ("await", Await),
+        ("return", Return),
+        ("if", If),
+        ("else", Else),
+        ("for", For),
+        ("while", While),
+        ("break", Break),
+        ("continue", Continue),
+        ("class", Class),
+        ("static", Static),
+        ("import", Import),
+        ("from", From),
+        ("export", Export),
+        ("try", Try),
+        ("catch", Catch),
+        ("finally", Finally),
+        ("true", True),
+        ("false", False),
+        ("null", Null),
+    ];
+
+    for tc in test_cases {
+        let lexer = Lexer::new(tc.0.to_string());
+        let mut tokens = lexer.tokens();
+        let token = tokens.next_token().unwrap();
+
+        assert_eq!(tc.1, token.token_type);
+    }
+}
+
 fn make_token(token_type: TokenType, lexeme: &str, start_pos: Pos, length: usize) -> Token {
     Token::new_with_span(token_type, lexeme.into(), Span::new(start_pos, length))
 }

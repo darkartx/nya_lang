@@ -1,13 +1,23 @@
 pub mod statement;
 pub mod expression;
+pub mod node;
 
 use std::fmt;
 
+use crate::{
+    span::Span,
+    token::Token,
+};
+
 pub use statement::*;
 pub use expression::*;
+pub use node::*;
 
 pub trait Expression: fmt::Debug {
     fn accept(&self, visitor: &mut dyn ExpressionVisitor);
+    fn token(&self) -> Option<&Token> { None }
+    fn span(&self) -> Option<Span> { None }
+    fn id(&self) -> Option<NodeId> { None }
 }
 
 pub trait ExpressionVisitor {
@@ -19,11 +29,16 @@ pub trait ExpressionVisitor {
 
 pub trait Statement: fmt::Debug {
     fn accept(&self, visitor: &mut dyn StatementVisitor);
+    fn token(&self) -> Option<&Token> { None }
+    fn span(&self) -> Option<Span> { None }
+    fn id(&self) -> Option<NodeId> { None }
 }
 
 pub trait StatementVisitor {
     fn visit_ast(&mut self, ast: &Ast);
-    fn visit_let(&mut self, expression: &Let);
+    fn visit_let(&mut self, let_statement: &Let);
+    fn visit_return(&mut self, return_statement: &Return);
+    fn visit_expr(&mut self, expr: &Expr);
 }
 
 #[derive(Debug, Default)]

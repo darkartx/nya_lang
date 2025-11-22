@@ -10,11 +10,18 @@ type TT = TokenType;
 type BoxStatement = Box<dyn ast::Statement>;
 type BoxExpression = Box<dyn ast::Expression>;
 
+const EXPRESSION_START_TTS: [TT; 9] = [
+    TT::IntNumber, TT::String, TT::True, TT::False, TT::FloatNumber, TT::Identifier, TT::Lparen, TT::Minus, TT::Not
+];
+
+const TERMINAL_TTS: [TT; 2] = [TT::NewLine, TT::Semicolon];
+
 #[derive(Debug)]
 pub(super) struct TokensParser<'a> {
     tokens: Tokens<'a>,
     current_token: Token,
     peek_token: Token,
+    node_id_gen: ast::NodeIdGen,
 }
 
 impl<'a> TokensParser<'a> {
@@ -23,6 +30,7 @@ impl<'a> TokensParser<'a> {
             tokens,
             current_token: Default::default(),
             peek_token: Default::default(),
+            node_id_gen: Default::default(),
         }
     }
 }
@@ -45,7 +53,7 @@ impl TokensParser<'_> {
             }
 
             statements.push(
-                self.parse_statement()?
+                self.parse_statement()?.into()
             );
         }
 
@@ -56,20 +64,31 @@ impl TokensParser<'_> {
 
     fn parse_statement(&mut self) -> Result<BoxStatement, Error> {
         match self.current_token_type() {
-            TT::Let => self.parse_let_statement(),
-            _ => Err(make_error(
-                UnexpectedTokenError {
-                    current: self.current_token.clone(),
-                    expected: vec![TT::Let]
-                },
-                self.current_token.span
-            )),
+            TT::Let => self.parse_let_statement().map(Into::into),
+            TT::Return => self.parse_retrun_statement().map(Into::into),
+            _ => {
+                if self.current_token_type_is(&EXPRESSION_START_TTS) {
+                    self.parse_expression_statement().map(Into::into)
+                } else {
+                    let mut expected = vec![TT::Let, TT::Return];
+                    expected.extend(EXPRESSION_START_TTS);
+
+                    Err(Error::new(
+                        ErrorKind::ExpectStatement(
+                            UnexpectedTokenError {
+                                token: self.current_token.clone(),
+                                expected
+                            }
+                        ),
+                        self.current_span()
+                    ))
+                }
+            }
         }
     }
 
     fn parse_let_statement(&mut self) -> Result<BoxStatement, Error> {
-        self.advance()?;
-
+        let token = self.expect_advance(&[TT::Let])?;
         let identifier = self.parse_idetifier()?;
         
         let expression = if self.current_token_type_is(&[TokenType::Assign]) {
@@ -79,9 +98,34 @@ impl TokensParser<'_> {
             None
         };
 
-        self.skip_terminal()?;
+        self.parse_terminal()?;
+        let statement = ast::Let::new(identifier, expression);
 
-        Ok(Box::new(ast::Let::new(identifier, expression)))
+        Ok(self.make_statement_node(statement, Some(token)))
+    }
+
+    fn parse_retrun_statement(&mut self) -> Result<BoxStatement, Error> {
+        let token = self.expect_advance(&[TT::Return])?;
+        let expression = if self.current_token_type_is(&EXPRESSION_START_TTS) {
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+
+        self.parse_terminal()?;
+
+        let statement = ast::Return::new(expression);
+
+        Ok(self.make_statement_node(statement, Some(token)))
+    }
+
+    fn parse_expression_statement(&mut self) -> Result<BoxStatement, Error> {
+        let token = self.current_token.clone();
+        let expression = self.parse_expression()?;
+        self.parse_terminal()?;
+        let statement = ast::Expr::new(expression);
+
+        Ok(self.make_statement_node(statement, Some(token)))
     }
 
     fn parse_expression(&mut self) -> Result<BoxExpression, Error> {
@@ -121,8 +165,10 @@ impl TokensParser<'_> {
                 TT::Minus => ast::BinaryOp::Minus,
                 _ => unreachable!(),
             };
+            let token = result.token().cloned();
+            let expression = ast::Binary{ left: result, op, right };
 
-            result = Box::new(ast::Binary{ left: result, op, right })
+            result = self.make_expression_node(expression, token)
         }
 
         Ok(result)
@@ -142,8 +188,10 @@ impl TokensParser<'_> {
                 TT::Mod => ast::BinaryOp::Mod,
                 _ => unreachable!(),
             };
+            let token = result.token().cloned();
+            let expression = ast::Binary{ left: result, op, right };
 
-            result = Box::new(ast::Binary{ left: result, op, right })
+            result = self.make_expression_node(expression, token)
         }
 
         Ok(result)
@@ -164,7 +212,8 @@ impl TokensParser<'_> {
                 TT::Not => ast::UnaryOp::Not,
                 _ => unreachable!(),
             };
-            result = Box::new(ast::Unary{op, right: result})
+            let expression = ast::Unary{op, right: result};
+            result = self.make_expression_node(expression, Some(unary_token))
         }
 
         Ok(result)
@@ -176,32 +225,37 @@ impl TokensParser<'_> {
             TT::String => self.parse_string_literal(),
             TT::True | TT::False => self.parse_bool_literal(),
             TT::FloatNumber => self.parse_float_literal(),
-            TT::Identifier => self.parse_idetifier()
-                .map(|i| Box::new(i) as Box<dyn ast::Expression>),
+            TT::Identifier => self.parse_idetifier(),
             TT::Lparen => self.parse_group(),
-            _ => Err(make_error(
-                UnexpectedTokenError {
-                    current: self.current_token.clone(),
-                    expected: vec![TT::IntNumber, TT::String, TT::True, TT::False, TT::FloatNumber, TT::Identifier, TT::Lparen]
-                },
-                self.current_token.span
-            ))
+            _ => {
+                Err(Error::new(
+                    ErrorKind::ExpectExpression(
+                        UnexpectedTokenError {
+                            token: self.current_token.clone(),
+                            expected: EXPRESSION_START_TTS.to_vec()
+                        }
+                    ),
+                    self.current_span()
+                ))
+            }
         }
     }
 
     fn parse_int_literal(&mut self) -> Result<BoxExpression, Error> {
         let token = self.expect_advance(&[TT::IntNumber])?;
         let value: i64 = handle_result(token.lexeme.parse(), token.span)?;
+        let expression = ast::Literal::Int(value);
 
-        Ok(Box::new(ast::Literal::Int(value)))
+        Ok(self.make_expression_node(expression, Some(token)))
     }
 
     fn parse_string_literal(&mut self) -> Result<BoxExpression, Error> {
         let token = self.expect_advance(&[TT::String])?;
         let value = &token.lexeme[1..token.lexeme.len() - 1];
         let value = handle_result(unescape_string(value), token.span)?;
+        let expression = ast::Literal::Str(value);
 
-        Ok(Box::new(ast::Literal::Str(value)))
+        Ok(self.make_expression_node(expression, Some(token)))
     }
 
     fn parse_bool_literal(&mut self) -> Result<BoxExpression, Error> {
@@ -211,20 +265,24 @@ impl TokensParser<'_> {
             TT::False => false,
             _ => unreachable!()
         };
+        let expression = ast::Literal::Bool(value);
 
-        Ok(Box::new(ast::Literal::Bool(value)))
+        Ok(self.make_expression_node(expression, Some(token)))
     }
 
     fn parse_float_literal(&mut self) -> Result<BoxExpression, Error> {
         let token = self.expect_advance(&[TT::FloatNumber])?;
         let value: f64 = handle_result(token.lexeme.parse(), token.span)?;
+        let expression = ast::Literal::Float(value);
 
-        Ok(Box::new(ast::Literal::Float(value)))
+        Ok(self.make_expression_node(expression, Some(token)))
     }
 
-    fn parse_idetifier(&mut self) -> Result<ast::Identifier, Error> {
+    fn parse_idetifier(&mut self) -> Result<BoxExpression, Error> {
         let token = self.expect_advance(&[TT::Identifier])?;
-        Ok(ast::Identifier(token.lexeme))
+        let expression = ast::Identifier(token.lexeme.clone());
+        
+        Ok(self.make_expression_node(expression, Some(token)))
     }
 
     fn parse_group(&mut self) -> Result<BoxExpression, Error> {
@@ -236,25 +294,38 @@ impl TokensParser<'_> {
         Ok(result)
     }
 
+    fn parse_terminal(&mut self) -> Result<(), Error> {
+        match self.current_token_type() {
+            TT::Semicolon | TT::NewLine => { self.advance()?; },
+            TT::Rbrace | TT::Eof => {},
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::ExpectTerminal(
+                        UnexpectedTokenError {
+                            token: self.current_token.clone(),
+                            expected: TERMINAL_TTS.to_vec()
+                        }
+                    ),
+                     self.current_span()
+                ))
+            }
+        }
+
+        Ok(())
+    }
+
     fn expect_advance(&mut self, token_types: &[TokenType]) -> Result<Token, Error> {
         if self.current_token_type_is(token_types) {
             Ok(self.advance()?)
         } else {
             Err(make_error(
                 UnexpectedTokenError {
-                    current: self.current_token.clone(),
+                    token: self.current_token.clone(),
                     expected: token_types.to_vec(),
                 },
-                self.current_token.span
+                self.current_span()
             ))
         }
-    }
-
-    fn skip_terminal(&mut self) -> Result<(), Error> {
-        self.skip_tokens(&[
-            TokenType::Semicolon,
-            TokenType::NewLine,
-        ])
     }
 
     fn skip_newlines(&mut self) -> Result<(), Error> {
@@ -275,8 +346,24 @@ impl TokensParser<'_> {
         token_types.iter().any(|tt| *tt == self.current_token.token_type)
     }
 
+    #[inline]
     fn current_token_type(&self) -> TokenType {
         self.current_token.token_type
+    }
+
+    #[inline]
+    fn current_span(&self) -> Option<Span> {
+        self.current_token.span
+    }
+
+    fn make_statement_node<T: ast::Statement + 'static>(&mut self, kind: T, token: Option<Token>) -> BoxStatement {
+        let id = self.node_id_gen.next_id();
+        ast::Node::new(id, kind, token).into()
+    }
+
+    fn make_expression_node<T: ast::Expression + 'static>(&mut self, kind: T, token: Option<Token>) -> BoxExpression {
+        let id = self.node_id_gen.next_id();
+        ast::Node::new(id, kind, token).into()
     }
 
     fn advance(&mut self) -> Result<Token, Error> {

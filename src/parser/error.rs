@@ -10,6 +10,9 @@ use crate::{
 pub enum ErrorKind {
     Lexer(LexerError),
     UnexpectedToken(UnexpectedTokenError),
+    ExpectExpression(UnexpectedTokenError),
+    ExpectTerminal(UnexpectedTokenError),
+    ExpectStatement(UnexpectedTokenError),
     ParseInt(num::ParseIntError),
     ParseString(ParseStringError),
     ParseFloat(num::ParseFloatError),
@@ -37,6 +40,9 @@ impl fmt::Display for Error {
             ErrorKind::ParseInt(err) => write!(f, "{err}"),
             ErrorKind::ParseString(err) => write!(f, "{err}"),
             ErrorKind::ParseFloat(err) => write!(f, "{err}"),
+            ErrorKind::ExpectExpression(err) => write!(f, "expect expression, got {}", err.token),
+            ErrorKind::ExpectTerminal(err) => write!(f, "expect terminal, got {}", err.token),
+            ErrorKind::ExpectStatement(err) => write!(f, "expect statement, got {}", err.token),
         }
     }
 }
@@ -130,13 +136,13 @@ impl error::Error for ParseStringError {
 
 #[derive(Debug, Clone)]
 pub struct UnexpectedTokenError {
-    pub current: Token,
+    pub token: Token,
     pub expected: Vec<TokenType>,
 }
 
 impl fmt::Display for UnexpectedTokenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unexpected token {}", self.current)?;
+        write!(f, "unexpected token {}", self.token)?;
 
         if self.expected.len() > 0 {
             let token_types_string = self.expected
